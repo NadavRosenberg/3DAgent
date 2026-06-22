@@ -71,6 +71,10 @@ export class Avatar {
     if (this.has("jawOpen")) this.kind = "arkit";
     else if (VISEME_KEYS.some((v) => this.has(v))) this.kind = "viseme";
 
+    // The GLB may store non-zero default morph values (e.g. partially-closed
+    // eyes). Zero everything so we start from a neutral open-eyed expression.
+    for (const mesh of this.meshes) mesh.morphTargetInfluences.fill(0);
+
     this._frame(model);
     this.root.add(model);
     return this;
@@ -196,14 +200,20 @@ export class Avatar {
     this.root.position.y = Math.sin(this._t * 0.8) * 0.01;
     this.root.rotation.y = Math.sin(this._t * 0.2) * 0.04;
 
-    // Blinking.
+    // Blinking — always write the eye shapes so GLB defaults can't linger.
     this._nextBlink -= dt;
     if (this._nextBlink <= 0) { this._blink = 1; this._nextBlink = 2 + Math.random() * 4; }
     if (this._blink > 0) {
       this._blink = Math.max(0, this._blink - dt * 9);
       const b = Math.sin((1 - this._blink) * Math.PI);
-      this._set("eyeBlink_L", b); this._set("eyeBlink_R", b);
-      this._set("eyesClosed", b);
+      this._set("eyeBlink_L",     b); this._set("eyeBlink_R",     b);
+      this._set("eyesClosed",     b);
+    } else {
+      // Between blinks: keep lids fully open, squint and downward-gaze at zero.
+      this._set("eyeBlink_L",     0); this._set("eyeBlink_R",     0);
+      this._set("eyesClosed",     0);
+      this._set("eyeSquint_L",    0); this._set("eyeSquint_R",    0);
+      this._set("eyeLookDown_L",  0); this._set("eyeLookDown_R",  0);
     }
 
     // Mouth / lip-sync.

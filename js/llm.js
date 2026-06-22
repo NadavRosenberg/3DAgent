@@ -1,19 +1,17 @@
-// Chat with OpenAI-compatible or Google Gemini.
+// Chat with Google Gemini (or canned offline replies).
 //
-// streamChat() is an async generator that yields text *tokens* as they arrive
-// from the provider's SSE stream. The caller accumulates them into sentences
-// and feeds them to the TTS pipeline in real time.
-//
-// chat() is the non-streaming wrapper kept for the offline/greeting path.
+// streamChat() is an async generator that yields text tokens as they arrive
+// from Gemini's SSE stream, then yields a final { _stats } sentinel with
+// token-usage data for the stats row in the UI.
 
 import { providerInfo } from "./config.js";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 const CANNED = [
-  "Hi there! I'm your holographic home assistant. Connect an API key in settings and I'll get a lot smarter.",
+  "Hi there! I'm your holographic home assistant. Add a Gemini API key in settings to unlock real conversations.",
   "Sure thing. I'm running in offline demo mode right now, but my voice and lip-sync are fully working.",
-  "Got it. Add an OpenAI or Gemini key in the settings panel to unlock real conversations.",
+  "Got it. Open the settings panel (⚙) and paste your Google Gemini API key to get started.",
   "Happy to help around the house! What would you like me to do next?",
 ];
 
@@ -24,59 +22,13 @@ function cannedReply(history) {
   return CANNED[Math.floor(Math.random() * CANNED.length)];
 }
 
-// ── Streaming (primary path) ──────────────────────────────────────────────
-// Yields string tokens as they arrive from the model's SSE stream.
+// ── Streaming ─────────────────────────────────────────────────────────────
 export async function* streamChat(settings, history) {
-  if (settings.provider === "openai" && settings.apiKey) {
-    yield* streamOpenAI(settings, history);
-    return;
-  }
   if (settings.provider === "gemini" && settings.apiKey) {
     yield* streamGemini(settings, history);
     return;
   }
   yield cannedReply(history);
-}
-
-async function* streamOpenAI(settings, history) {
-  const base  = (settings.baseUrl || "https://api.openai.com/v1").replace(/\/$/, "");
-  const model = settings.chatModel || providerInfo("openai").chatModel;
-
-  const res = await fetch(`${base}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      model, temperature: 0.7, stream: true,
-      messages: [{ role: "system", content: settings.systemPrompt }, ...history],
-    }),
-  });
-  if (!res.ok) throw new Error(`LLM ${res.status}: ${(await res.text()).slice(0, 160)}`);
-
-  const reader  = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-
-    let nl;
-    while ((nl = buf.indexOf("\n")) !== -1) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      if (!line.startsWith("data: ")) continue;
-      const data = line.slice(6);
-      if (data === "[DONE]") return;
-      try {
-        const token = JSON.parse(data).choices?.[0]?.delta?.content;
-        if (token) yield token;
-      } catch { /* skip bad JSON */ }
-    }
-  }
 }
 
 async function* streamGemini(settings, history) {
@@ -86,7 +38,6 @@ async function* streamGemini(settings, history) {
     parts: [{ text: m.content }],
   }));
 
-  // alt=sse returns server-sent events; each event has a partial candidate.
   const res = await fetch(
     `${GEMINI_BASE}/models/${model}:streamGenerateContent?key=${encodeURIComponent(settings.apiKey)}&alt=sse`,
     {
@@ -104,6 +55,7 @@ async function* streamGemini(settings, history) {
   const reader  = res.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
+  let lastUsageMeta = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -117,17 +69,30 @@ async function* streamGemini(settings, history) {
       if (!line.startsWith("data: ")) continue;
       try {
         const chunk = JSON.parse(line.slice(6));
+        if (chunk.usageMetadata) lastUsageMeta = chunk.usageMetadata;
         const parts = chunk.candidates?.[0]?.content?.parts || [];
         const text  = parts.map((p) => p.text || "").join("");
         if (text) yield text;
-      } catch { /* skip */ }
+      } catch { /* skip malformed events */ }
     }
+  }
+
+  if (lastUsageMeta) {
+    yield {
+      _stats: true,
+      promptTokens:     lastUsageMeta.promptTokenCount,
+      completionTokens: lastUsageMeta.candidatesTokenCount
+        ?? (lastUsageMeta.totalTokenCount - lastUsageMeta.promptTokenCount),
+    };
   }
 }
 
 // ── Non-streaming convenience wrapper (greeting / offline) ────────────────
 export async function chat(settings, history) {
   let full = "";
-  for await (const token of streamChat(settings, history)) full += token;
+  for await (const token of streamChat(settings, history)) {
+    if (token && typeof token === "object") continue; // skip stats sentinel
+    full += token;
+  }
   return full || "…";
 }

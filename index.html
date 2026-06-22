@@ -35,12 +35,13 @@
 
   <!-- Chat dock -->
   <div id="dock">
+    <div id="dock-handle" title="Drag to resize chat" aria-label="Resize chat"></div>
     <div id="transcript" aria-live="polite"></div>
     <form id="composer">
       <input id="prompt" type="text" autocomplete="off"
              placeholder="Ask your appliance assistant…" />
       <button id="mic" type="button" class="icon-btn" title="Speak" aria-label="Speak">🎙</button>
-      <button id="send" type="submit">Send</button>
+      <button id="send" type="submit" title="Send" aria-label="Send">↑</button>
     </form>
   </div>
 
@@ -55,7 +56,6 @@
       <label>
         <span>LLM / TTS provider</span>
         <select id="provider">
-          <option value="openai">OpenAI — smart replies + natural voice + real lip‑sync</option>
           <option value="gemini">Google Gemini — smart replies + natural voice + real lip‑sync</option>
           <option value="local">Offline demo — no key, canned replies + browser voice</option>
         </select>
@@ -63,12 +63,8 @@
 
       <div id="cloudSettings">
         <label>
-          <span>API key</span>
+          <span>Gemini API key</span>
           <input id="apiKey" type="password" placeholder="paste your key" />
-        </label>
-        <label id="baseUrlField">
-          <span>Base URL (OpenAI‑compatible)</span>
-          <input id="baseUrl" type="text" placeholder="https://api.openai.com/v1" />
         </label>
         <div class="row">
           <label>
@@ -81,7 +77,7 @@
           </label>
         </div>
         <p class="hint">The key is stored only in this browser (localStorage) and is sent
-          directly to the provider from your machine.</p>
+          directly to Google from your machine — never to any third-party server.</p>
       </div>
 
       <label>

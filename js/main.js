@@ -28,7 +28,8 @@ camera.position.set(0, 1.45, 3.2);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 1.3, 0);
 controls.enableDamping = true;
-controls.enablePan = false;
+controls.enablePan  = true;     // always enabled; gated by ⌘ key below
+controls.panSpeed   = 1.0;
 controls.enableZoom = true;
 controls.zoomToCursor = true;
 controls.zoomSpeed = 1.2;
@@ -36,6 +37,33 @@ controls.minDistance = 2.2;
 controls.maxDistance = 4.5;
 controls.minPolarAngle = Math.PI * 0.3;
 controls.maxPolarAngle = Math.PI * 0.62;
+
+// Default: left-drag = rotate, right-drag = rotate (no accidental pan).
+// ⌘ / Ctrl held:  left-drag switches to PAN.
+controls.mouseButtons = {
+  LEFT:   THREE.MOUSE.ROTATE,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT:  THREE.MOUSE.ROTATE,
+};
+
+// ⌘/Ctrl + left-drag = PAN.
+// We must register on `window` with capture:true so our handler runs before
+// OrbitControls' own pointerdown listener on `canvas` — listeners on the
+// same target element fire in registration order regardless of capture flag,
+// but a parent's capture listener always fires before any target listener.
+let _cmdHeld = false;
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Meta" || e.key === "Control") { _cmdHeld = true;  canvas.style.cursor = "grab"; }
+});
+window.addEventListener("keyup", (e) => {
+  if (e.key === "Meta" || e.key === "Control") { _cmdHeld = false; canvas.style.cursor = ""; }
+});
+window.addEventListener("blur", () => { _cmdHeld = false; canvas.style.cursor = ""; });
+
+window.addEventListener("pointerdown", (e) => {
+  if (e.target !== canvas) return;
+  controls.mouseButtons.LEFT = _cmdHeld ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+}, { capture: true });
 
 scene.add(new THREE.AmbientLight(0x6fd0ff, 0.35));
 const key = new THREE.DirectionalLight(0x9ff0ff, 1.1);
@@ -239,33 +267,55 @@ async function send(text) {
   promptEl.value = "";
 
   setStatus("thinking");
+  const t0 = performance.now();
+  let ttft = null;
 
-  // Create bot message element immediately (text streams into it).
-  const botDiv = document.createElement("div");
-  botDiv.className = "msg bot";
-  transcript.appendChild(botDiv);
+  // Typing indicator — three bouncing dots while waiting for the first token.
+  const typingEl = document.createElement("div");
+  typingEl.className = "msg bot";
+  typingEl.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+  transcript.appendChild(typingEl);
   transcript.scrollTop = transcript.scrollHeight;
 
-  const splitter = new SentenceSplitter();
-  const queue    = new SpeakQueue(settings, lipsync);
-  let fullText   = "";
-  let firstToken = true;
+  // Real bot message element — appended only once the first token arrives.
+  const botDiv = document.createElement("div");
+  botDiv.className = "msg bot";
+
+  const splitter  = new SentenceSplitter();
+  const queue     = new SpeakQueue(settings, lipsync);
+  let fullText    = "";
+  let firstToken  = true;
+  let statsData   = null;  // populated by the _stats sentinel from streamChat
 
   try {
-    for await (const token of streamChat(settings, history)) {
-      if (firstToken) { setStatus("speaking"); firstToken = false; }
-      fullText     += token;
+    for await (const chunk of streamChat(settings, history)) {
+      // Sentinel object from llm.js carrying token-usage stats.
+      if (chunk && typeof chunk === "object" && chunk._stats) {
+        statsData = chunk;
+        continue;
+      }
+      if (firstToken) {
+        ttft = performance.now() - t0;
+        setStatus("speaking");
+        firstToken = false;
+        typingEl.remove();           // swap dots → real message
+        transcript.appendChild(botDiv);
+        transcript.scrollTop = transcript.scrollHeight;
+      }
+      fullText += chunk;
       botDiv.textContent = fullText;
       transcript.scrollTop = transcript.scrollHeight;
 
-      // Flush any complete sentences into the TTS queue.
-      for (const sentence of splitter.push(token)) queue.enqueue(sentence);
+      for (const sentence of splitter.push(chunk)) queue.enqueue(sentence);
     }
   } catch (e) {
     console.error("LLM stream error:", e);
+    typingEl.remove();
     const errMsg = `Sorry, I hit an error: ${e.message}`;
-    if (!fullText) { botDiv.textContent = errMsg; fullText = errMsg; }
+    if (!fullText) { botDiv.textContent = errMsg; fullText = errMsg; transcript.appendChild(botDiv); }
   }
+
+  const genMs = performance.now() - t0;
 
   // Flush any trailing text not yet enqueued.
   const tail = splitter.flush();
@@ -274,12 +324,68 @@ async function send(text) {
 
   history.push({ role: "assistant", content: fullText });
 
+  // Render meta row (stats + replay button) below the bot message.
+  if (fullText) {
+    const compTokens = statsData?.completionTokens
+      ?? Math.round(fullText.trim().split(/\s+/).length * 1.35);
+    const promptTokens = statsData?.promptTokens ?? null;
+    const tokPerSec = (compTokens && genMs > 200)
+      ? Math.round(compTokens / (genMs / 1000)) : null;
+
+    const statsParts = [];
+    if (ttft !== null)  statsParts.push(`first token ${(ttft / 1000).toFixed(2)}s`);
+    if (compTokens)     statsParts.push(`${compTokens} tokens`);
+    if (promptTokens)   statsParts.push(`${promptTokens} prompt`);
+    if (tokPerSec)      statsParts.push(`${tokPerSec} tok/s`);
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "msg-meta";
+
+    const statsEl = document.createElement("span");
+    statsEl.className = "msg-stats";
+    statsEl.textContent = statsParts.join(" · ");
+    metaEl.appendChild(statsEl);
+
+    const replayBtn = document.createElement("button");
+    replayBtn.className = "replay-btn";
+    replayBtn.title = "Replay response";
+    replayBtn.textContent = "↺ replay";
+    const capturedText = fullText;
+    replayBtn.addEventListener("click", () => replay(capturedText, replayBtn));
+    metaEl.appendChild(replayBtn);
+
+    transcript.appendChild(metaEl);
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
   // Block until the last audio chunk finishes playing.
   try { await queue.done(); } catch (e) { console.warn("Queue error:", e); }
 
   setStatus("idle");
   busy = false;
   sendBtn.disabled = false;
+  promptEl.focus();
+}
+
+// ---------------------------------------------------------------------------
+//  Replay a previous response
+// ---------------------------------------------------------------------------
+async function replay(text, btn) {
+  if (busy) return;
+  busy = true;
+  sendBtn.disabled = true;
+  if (btn) { btn.textContent = "▶ playing…"; btn.disabled = true; }
+  setStatus("speaking");
+  try {
+    await speak(settings, lipsync, text);
+  } catch (e) {
+    console.warn("Replay error:", e);
+  }
+  lipsync.stop();
+  setStatus("idle");
+  busy = false;
+  sendBtn.disabled = false;
+  if (btn) { btn.textContent = "↺ replay"; btn.disabled = false; }
   promptEl.focus();
 }
 
@@ -313,6 +419,33 @@ document.getElementById("composer").addEventListener("submit", (e) => {
   send(promptEl.value);
 });
 
+// ── Drag handle — resize transcript area ──────────────────────────────────
+const dockHandle = document.getElementById("dock-handle");
+let _dragY0 = 0;
+let _dragH0 = 0;
+const MIN_H = 48;
+const MAX_H_RATIO = 0.68;
+
+dockHandle.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  _dragY0 = e.clientY;
+  _dragH0 = transcript.clientHeight;
+  dockHandle.setPointerCapture(e.pointerId);
+  dockHandle.style.cursor = "ns-resize";
+});
+
+dockHandle.addEventListener("pointermove", (e) => {
+  if (!dockHandle.hasPointerCapture(e.pointerId)) return;
+  const delta  = _dragY0 - e.clientY;           // up = positive = taller
+  const newH   = Math.max(MIN_H, Math.min(window.innerHeight * MAX_H_RATIO, _dragH0 + delta));
+  transcript.style.maxHeight = newH + "px";
+  transcript.scrollTop = transcript.scrollHeight;
+});
+
+dockHandle.addEventListener("pointerup", () => {
+  dockHandle.releasePointerCapture(event.pointerId);
+});
+
 // Speech-to-text mic (Chrome / Edge)
 const micBtn = document.getElementById("mic");
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -336,7 +469,6 @@ const settingsEl  = document.getElementById("settings");
 const fields = {
   provider:     document.getElementById("provider"),
   apiKey:       document.getElementById("apiKey"),
-  baseUrl:      document.getElementById("baseUrl"),
   chatModel:    document.getElementById("chatModel"),
   ttsVoice:     document.getElementById("ttsVoice"),
   avatarUrl:    document.getElementById("avatarUrl"),
@@ -344,7 +476,6 @@ const fields = {
 };
 
 const cloudSettings = document.getElementById("cloudSettings");
-const baseUrlField  = document.getElementById("baseUrlField");
 
 function populateVoices(provider, selected) {
   const info = providerInfo(provider);
@@ -361,7 +492,6 @@ function syncProviderVisibility(selectedVoice) {
   const provider = fields.provider.value;
   const info     = providerInfo(provider);
   cloudSettings.style.display  = provider === "local" ? "none" : "";
-  baseUrlField.style.display   = info.needsBaseUrl ? "" : "none";
   populateVoices(provider, selectedVoice ?? fields.ttsVoice.value);
   fields.chatModel.placeholder = info.chatModel || "(provider default)";
 }
@@ -388,6 +518,7 @@ settingsEl.addEventListener("click", (e) => { if (e.target === settingsEl) close
 document.getElementById("saveSettings").addEventListener("click", async () => {
   const prevAvatar = settings.avatarUrl;
   for (const k of Object.keys(fields)) settings[k] = fields[k].value.trim() || DEFAULTS[k];
+  delete settings.baseUrl; // OpenAI-era field — no longer used
   saveSettings(settings);
   closeSettings();
   if (settings.avatarUrl !== prevAvatar) await loadAvatar();
@@ -400,7 +531,7 @@ const configured = settings.provider !== "local" && !!settings.apiKey;
 const GREETING   = "Hologram online. How can I help you today?";
 addMsg("bot", "Hologram online. " + (configured
   ? "Ask me anything — tap or click once to let me speak."
-  : "Running in offline demo mode — open settings (⚙) to add an OpenAI or Gemini key. Tap or click once to let me speak."));
+  : "Running in offline demo mode — open settings (⚙) to add a Gemini API key. Tap or click once to let me speak."));
 setStatus("idle");
 
 async function greet() {

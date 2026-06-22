@@ -3,9 +3,8 @@
 const KEY = "hologram-avatar-settings";
 
 export const DEFAULTS = {
-  provider: "local",            // "openai" | "gemini" | "local"
+  provider: "local",            // "gemini" | "local"
   apiKey: "",
-  baseUrl: "https://api.openai.com/v1", // OpenAI-compatible only
   chatModel: "",                // empty => provider default (see PROVIDERS)
   ttsVoice: "",                 // empty => provider default
   avatarUrl: "./assets/avatar.glb",
@@ -17,21 +16,12 @@ export const DEFAULTS = {
 
 // Per-provider defaults + voice lists used to populate the settings UI.
 export const PROVIDERS = {
-  openai: {
-    label: "OpenAI",
-    chatModel: "gpt-4o-mini",
-    ttsModel: "gpt-4o-mini-tts",
-    voices: ["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
-    defaultVoice: "nova",
-    needsBaseUrl: true,
-  },
   gemini: {
     label: "Google Gemini",
     chatModel: "gemini-2.5-flash",
     ttsModel: "gemini-2.5-flash-preview-tts",
     voices: ["Kore", "Puck", "Charon", "Aoede", "Leda", "Zephyr", "Fenrir", "Sulafat"],
     defaultVoice: "Kore",
-    needsBaseUrl: false,
   },
   local: {
     label: "Offline demo",
@@ -39,7 +29,6 @@ export const PROVIDERS = {
     ttsModel: "",
     voices: [],
     defaultVoice: "",
-    needsBaseUrl: false,
   },
 };
 
@@ -49,7 +38,10 @@ export function providerInfo(provider) {
 
 export function loadSettings() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || "{}") };
+    const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    // Migrate anyone who had "openai" saved — switch them to "gemini".
+    if (saved.provider === "openai") saved.provider = "gemini";
+    return { ...DEFAULTS, ...saved };
   } catch {
     return { ...DEFAULTS };
   }
