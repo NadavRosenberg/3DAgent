@@ -8,7 +8,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { Avatar } from "./avatar.js";
 import { LipSync } from "./lipsync.js";
 import { streamChat } from "./llm.js";
-import { speak, SpeakQueue } from "./tts.js";
+import { speak, SpeakQueue, cancelSpeak } from "./tts.js";
 import { loadSettings, saveSettings, DEFAULTS, providerInfo } from "./config.js";
 
 // ---------------------------------------------------------------------------
@@ -148,8 +148,9 @@ const avatar  = new Avatar(renderer);
 scene.add(avatar.root);
 const lipsync = new LipSync(avatar);
 const history = [];
-let busy    = false;
-let greeted = false;
+let busy             = false;
+let greeted          = false;
+let _greetingActive  = false; // true while the opening greeting is playing
 
 async function loadAvatar() {
   setLoader(true, "Loading avatar…");
@@ -259,6 +260,14 @@ class SentenceSplitter {
 async function send(text) {
   text = text.trim();
   if (!text || busy) return;
+
+  // If the opening greeting is still playing, cut it short and proceed.
+  if (_greetingActive) {
+    _greetingActive = false;
+    cancelSpeak();
+    lipsync.stop();
+  }
+
   greeted = true;
   busy = true;
   sendBtn.disabled = true;
@@ -326,16 +335,18 @@ async function send(text) {
 
   // Render meta row (stats + replay button) below the bot message.
   if (fullText) {
-    const compTokens = statsData?.completionTokens
+    const model        = statsData?.model ?? settings.chatModel ?? providerInfo(settings.provider).chatModel;
+    const compTokens   = statsData?.completionTokens
       ?? Math.round(fullText.trim().split(/\s+/).length * 1.35);
     const promptTokens = statsData?.promptTokens ?? null;
-    const tokPerSec = (compTokens && genMs > 200)
+    const tokPerSec    = (compTokens && genMs > 200)
       ? Math.round(compTokens / (genMs / 1000)) : null;
 
     const statsParts = [];
-    if (ttft !== null)  statsParts.push(`first token ${(ttft / 1000).toFixed(2)}s`);
-    if (compTokens)     statsParts.push(`${compTokens} tokens`);
-    if (promptTokens)   statsParts.push(`${promptTokens} prompt`);
+    if (model)          statsParts.push(model);
+    if (ttft !== null)  statsParts.push(`⚡ ${(ttft / 1000).toFixed(2)}s`);
+    if (compTokens)     statsParts.push(`out: ${compTokens} tok`);
+    if (promptTokens)   statsParts.push(`in: ${promptTokens} tok`);
     if (tokPerSec)      statsParts.push(`${tokPerSec} tok/s`);
 
     const metaEl = document.createElement("div");
@@ -535,15 +546,18 @@ addMsg("bot", "Hologram online. " + (configured
 setStatus("idle");
 
 async function greet() {
-  if (greeted || busy || history.length > 0) return;
+  if (greeted || history.length > 0) return;
   greeted = true;
-  busy = true;
+  _greetingActive = true;
   lipsync.ensureCtx();
   setStatus("speaking");
   try { await speak(settings, lipsync, GREETING); } catch (e) { console.warn(e); }
-  lipsync.stop();
-  setStatus("idle");
-  busy = false;
+  // Only clean up if send() didn't already interrupt us.
+  if (_greetingActive) {
+    _greetingActive = false;
+    lipsync.stop();
+    setStatus("idle");
+  }
 }
 
 await loadAvatar();

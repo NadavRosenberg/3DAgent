@@ -179,6 +179,19 @@ export class SpeakQueue {
 // ════════════════════════════════════════════════════════════════════════════
 //  speak() — single-sentence path (greeting + canned replies)
 // ════════════════════════════════════════════════════════════════════════════
+
+// Tracked so cancelSpeak() can stop it mid-playback.
+let _activeSrc = null;
+
+/** Stop whatever speak() is currently playing (used to interrupt the greeting). */
+export function cancelSpeak() {
+  if (_activeSrc) {
+    try { _activeSrc.stop(); } catch (_) {}
+    _activeSrc = null;
+  }
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+
 export async function speak(settings, lipsync, text) {
   if (!text) return;
   if (settings.provider === "gemini" && settings.apiKey) {
@@ -195,9 +208,10 @@ async function _speakGemini(settings, lipsync, text) {
   const ctx  = lipsync.ensureCtx();
   const src  = ctx.createBufferSource();
   src.buffer = buffer;
+  _activeSrc = src;
   lipsync.attachNode(src);
   src.start();
-  await new Promise((r) => { src.onended = r; });
+  await new Promise((r) => { src.onended = () => { _activeSrc = null; r(); }; });
   lipsync.stop();
 }
 

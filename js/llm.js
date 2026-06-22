@@ -80,6 +80,7 @@ async function* streamGemini(settings, history) {
   if (lastUsageMeta) {
     yield {
       _stats: true,
+      model,
       promptTokens:     lastUsageMeta.promptTokenCount,
       completionTokens: lastUsageMeta.candidatesTokenCount
         ?? (lastUsageMeta.totalTokenCount - lastUsageMeta.promptTokenCount),
