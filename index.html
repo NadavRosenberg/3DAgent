@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hologram Avatar Assistant</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <!-- three.js as ES modules from CDN -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- 3D stage -->
+  <div id="stage">
+    <canvas id="scene"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+
+    <div id="loader">
+      <div class="ring"></div>
+      <p>Booting hologram…</p>
+    </div>
+
+    <div id="status" class="status">idle</div>
+
+    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+  </div>
+
+  <!-- Chat dock -->
+  <div id="dock">
+    <div id="transcript" aria-live="polite"></div>
+    <form id="composer">
+      <input id="prompt" type="text" autocomplete="off"
+             placeholder="Ask your appliance assistant…" />
+      <button id="mic" type="button" class="icon-btn" title="Speak" aria-label="Speak">🎙</button>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settings" class="hidden" role="dialog" aria-modal="true" aria-label="Settings">
+    <div class="panel">
+      <header>
+        <h2>Settings</h2>
+        <button id="closeSettings" class="icon-btn" aria-label="Close">✕</button>
+      </header>
+
+      <label>
+        <span>LLM / TTS provider</span>
+        <select id="provider">
+          <option value="openai">OpenAI — smart replies + natural voice + real lip‑sync</option>
+          <option value="gemini">Google Gemini — smart replies + natural voice + real lip‑sync</option>
+          <option value="local">Offline demo — no key, canned replies + browser voice</option>
+        </select>
+      </label>
+
+      <div id="cloudSettings">
+        <label>
+          <span>API key</span>
+          <input id="apiKey" type="password" placeholder="paste your key" />
+        </label>
+        <label id="baseUrlField">
+          <span>Base URL (OpenAI‑compatible)</span>
+          <input id="baseUrl" type="text" placeholder="https://api.openai.com/v1" />
+        </label>
+        <div class="row">
+          <label>
+            <span>Chat model</span>
+            <input id="chatModel" type="text" placeholder="(provider default)" />
+          </label>
+          <label>
+            <span>Voice</span>
+            <select id="ttsVoice"></select>
+          </label>
+        </div>
+        <p class="hint">The key is stored only in this browser (localStorage) and is sent
+          directly to the provider from your machine.</p>
+      </div>
+
+      <label>
+        <span>Avatar GLB URL <em>(optional — try a Ready Player Me URL)</em></span>
+        <input id="avatarUrl" type="text" placeholder="./assets/avatar.glb" />
+      </label>
+
+      <label>
+        <span>Personality / system prompt</span>
+        <textarea id="systemPrompt" rows="3"></textarea>
+      </label>
+
+      <div class="actions">
+        <button id="saveSettings" type="button">Save &amp; reload avatar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
