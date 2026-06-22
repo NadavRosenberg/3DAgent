@@ -243,7 +243,15 @@ export class LipSync {
       return;
     }
 
-    // 3. Fallback — energy only
+    // Gap between streaming chunks (ctx.currentTime between two scheduled buffers).
+    // Drive mouth to the rest/closed position so the avatar pauses naturally
+    // instead of holding the last viseme or falling to the generic energy fallback.
+    if (this.mode === "active" && this._chunks.length > 0) {
+      this.avatar.setViseme({ open: 0, round: 0, smile: 0, close: 0, bite: 0, fwd: 0, tongue: 0 });
+      return;
+    }
+
+    // 3. Fallback — energy only (single-shot with no phoneme schedule)
     const shape = this.mode === "procedural" ? this._shapeCur : 0.5;
     this.avatar.setMouth(energy * 0.65, shape);
   }

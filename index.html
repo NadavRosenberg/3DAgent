@@ -31,6 +31,16 @@
     <div id="status" class="status">idle</div>
 
     <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+
+    <!-- Navigation shortcuts hint card -->
+    <div id="shortcuts">
+      <div class="shortcuts-title">Navigation</div>
+      <ul class="shortcuts-list">
+        <li><span class="shortcut-keys"><kbd>drag</kbd></span><span>Orbit</span></li>
+        <li><span class="shortcut-keys"><kbd>⌘</kbd><kbd>drag</kbd></span><span>Pan</span></li>
+        <li><span class="shortcut-keys"><kbd>scroll</kbd><span class="sc-sep">/</span><kbd>pinch</kbd></span><span>Zoom</span></li>
+      </ul>
+    </div>
   </div>
 
   <!-- Chat dock -->
@@ -41,7 +51,12 @@
       <input id="prompt" type="text" autocomplete="off"
              placeholder="Ask your appliance assistant…" />
       <button id="mic" type="button" class="icon-btn" title="Speak" aria-label="Speak">🎙</button>
-      <button id="send" type="submit" title="Send" aria-label="Send">↑</button>
+      <button id="send" type="submit" title="Send" aria-label="Send">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3.714 3.048a.498.498 0 0 0-.683.627l2.843 7.627a2 2 0 0 1 0 1.396l-2.842 7.627a.498.498 0 0 0 .682.627l18-8.5a.5.5 0 0 0 0-.904z"/>
+          <path d="M6 12h16"/>
+        </svg>
+      </button>
     </form>
   </div>
 

@@ -156,6 +156,77 @@ html, body {
     0 0  18px rgba(95,227,255,0.18);
 }
 #settingsBtn { position: absolute; top: 16px; right: 16px; }
+
+/* ── Navigation shortcuts card ──────────────────────────────── */
+#shortcuts {
+  position: absolute;
+  top: 16px; left: 16px;
+  padding: 10px 14px 12px;
+  border-radius: 14px;
+  background: rgba(14, 14, 20, 0.48);
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(48px) saturate(160%);
+  -webkit-backdrop-filter: blur(48px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    0 4px 24px rgba(0,0,0,0.35);
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.shortcuts-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.35);
+  margin-bottom: 8px;
+}
+
+.shortcuts-list {
+  list-style: none;
+  margin: 0; padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.shortcuts-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-size: 11px;
+  color: rgba(255,255,255,0.55);
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.sc-sep {
+  font-size: 9px;
+  color: rgba(255,255,255,0.28);
+  padding: 0 1px;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 5px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.75);
+  background: rgba(255,255,255,0.09);
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  white-space: nowrap;
+}
 #mic {
   /* Inside the composer pill — override icon-btn defaults */
   backdrop-filter: none;
@@ -419,23 +490,25 @@ html, body {
   width: 38px; height: 38px;
   border-radius: 50%;
   padding: 0;
-  font-size: 20px;
-  font-weight: 300;
-  line-height: 1;
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
-  color: rgba(255,255,255,0.75);
+  color: rgba(255,255,255,0.80);
   background: rgba(255,255,255,0.10);
   border: 1px solid rgba(255,255,255,0.12);
   box-shadow: none;
   transition: background 0.15s, color 0.15s, transform 0.10s;
 }
+#send svg {
+  width: 18px; height: 18px;
+  display: block;
+}
 #send:hover {
-  background: rgba(255,255,255,0.18);
-  color: rgba(255,255,255,0.95);
+  background: rgba(255,255,255,0.20);
+  color: #fff;
   transform: scale(1.06);
   box-shadow: none;
 }
-#send:active  { transform: scale(0.96); }
+#send:active  { transform: scale(0.94); }
 #send:disabled { opacity: 0.22; cursor: default; transform: none; }
 
 

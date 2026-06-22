@@ -38,31 +38,68 @@ controls.maxDistance = 4.5;
 controls.minPolarAngle = Math.PI * 0.3;
 controls.maxPolarAngle = Math.PI * 0.62;
 
-// Default: left-drag = rotate, right-drag = rotate (no accidental pan).
-// ⌘ / Ctrl held:  left-drag switches to PAN.
+// Default: left-drag = rotate, scroll = zoom.
 controls.mouseButtons = {
   LEFT:   THREE.MOUSE.ROTATE,
   MIDDLE: THREE.MOUSE.DOLLY,
   RIGHT:  THREE.MOUSE.ROTATE,
 };
+controls.touches = {
+  ONE: THREE.TOUCH.ROTATE,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
 
-// ⌘/Ctrl + left-drag = PAN.
-// We must register on `window` with capture:true so our handler runs before
-// OrbitControls' own pointerdown listener on `canvas` — listeners on the
-// same target element fire in registration order regardless of capture flag,
-// but a parent's capture listener always fires before any target listener.
-let _cmdHeld = false;
+// ── ⌘/Ctrl + drag = PAN ──────────────────────────────────────────────────
+// We bypass OrbitControls entirely for this gesture: intercept the pointerdown
+// at the window capture phase (runs before any canvas listener), call
+// stopPropagation() so OrbitControls never sees it, then move the camera target
+// manually based on subsequent pointermove events.
+let _cmdHeld     = false;
+let _panActive   = false;
+let _panPtr      = null;
+let _panLast     = null;
+
+function _panBy(dx, dy) {
+  const d     = camera.position.distanceTo(controls.target);
+  const scale = d / canvas.clientHeight;
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+  const up    = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+  controls.target .addScaledVector(right, -dx * scale).addScaledVector(up,  dy * scale);
+  camera.position .addScaledVector(right, -dx * scale).addScaledVector(up,  dy * scale);
+  controls.update();
+}
+
 window.addEventListener("keydown", (e) => {
   if (e.key === "Meta" || e.key === "Control") { _cmdHeld = true;  canvas.style.cursor = "grab"; }
 });
 window.addEventListener("keyup", (e) => {
-  if (e.key === "Meta" || e.key === "Control") { _cmdHeld = false; canvas.style.cursor = ""; }
+  if (e.key === "Meta" || e.key === "Control") { _cmdHeld = false; if (!_panActive) canvas.style.cursor = ""; }
 });
 window.addEventListener("blur", () => { _cmdHeld = false; canvas.style.cursor = ""; });
 
 window.addEventListener("pointerdown", (e) => {
-  if (e.target !== canvas) return;
-  controls.mouseButtons.LEFT = _cmdHeld ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+  if (e.target !== canvas || !_cmdHeld || e.button !== 0) return;
+  e.stopPropagation();          // OrbitControls won't see this event
+  _panActive = true;
+  _panPtr    = e.pointerId;
+  _panLast   = { x: e.clientX, y: e.clientY };
+  canvas.setPointerCapture(e.pointerId);
+  canvas.style.cursor = "grabbing";
+}, { capture: true });
+
+window.addEventListener("pointermove", (e) => {
+  if (!_panActive || e.pointerId !== _panPtr) return;
+  _panBy(e.clientX - _panLast.x, e.clientY - _panLast.y);
+  _panLast = { x: e.clientX, y: e.clientY };
+}, { capture: true });
+
+window.addEventListener("pointerup", (e) => {
+  if (!_panActive || e.pointerId !== _panPtr) return;
+  _panActive = false;
+  _panPtr    = null;
+  _panLast   = null;
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+  canvas.style.cursor = _cmdHeld ? "grab" : "";
 }, { capture: true });
 
 scene.add(new THREE.AmbientLight(0x6fd0ff, 0.35));
