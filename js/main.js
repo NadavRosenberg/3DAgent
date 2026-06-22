@@ -370,28 +370,14 @@ async function send(text) {
 
   history.push({ role: "assistant", content: fullText });
 
-  // Render meta row (stats + replay button) below the bot message.
+  // Render meta row immediately — replay button is usable now, stats filled after audio.
+  let statsEl = null;
   if (fullText) {
-    const model        = statsData?.model ?? settings.chatModel ?? providerInfo(settings.provider).chatModel;
-    const compTokens   = statsData?.completionTokens
-      ?? Math.round(fullText.trim().split(/\s+/).length * 1.35);
-    const promptTokens = statsData?.promptTokens ?? null;
-    const tokPerSec    = (compTokens && genMs > 200)
-      ? Math.round(compTokens / (genMs / 1000)) : null;
-
-    const statsParts = [];
-    if (model)          statsParts.push(model);
-    if (ttft !== null)  statsParts.push(`⚡ ${(ttft / 1000).toFixed(2)}s`);
-    if (compTokens)     statsParts.push(`out: ${compTokens} tok`);
-    if (promptTokens)   statsParts.push(`in: ${promptTokens} tok`);
-    if (tokPerSec)      statsParts.push(`${tokPerSec} tok/s`);
-
     const metaEl = document.createElement("div");
     metaEl.className = "msg-meta";
 
-    const statsEl = document.createElement("span");
+    statsEl = document.createElement("div");
     statsEl.className = "msg-stats";
-    statsEl.textContent = statsParts.join(" · ");
     metaEl.appendChild(statsEl);
 
     const replayBtn = document.createElement("button");
@@ -408,6 +394,45 @@ async function send(text) {
 
   // Block until the last audio chunk finishes playing.
   try { await queue.done(); } catch (e) { console.warn("Queue error:", e); }
+
+  // Populate stats now that all timings are known.
+  if (statsEl) {
+    const model        = statsData?.model ?? settings.chatModel ?? providerInfo(settings.provider).chatModel;
+    const compTokens   = statsData?.completionTokens
+      ?? Math.round(fullText.trim().split(/\s+/).length * 1.35);
+    const promptTokens = statsData?.promptTokens ?? null;
+    const tokPerSec    = (compTokens && genMs > 200)
+      ? Math.round(compTokens / (genMs / 1000)) : null;
+
+    const tm = queue.getTimings();
+    // All durations relative to t0 (when the user hit send).
+    const llmMs    = genMs;
+    const ttfaMs   = tm.tFirstAudioStart ? tm.tFirstAudioStart - t0 : null;
+    const ttsFetch = (tm.tFirstBufReady && tm.tFirstEnqueue)
+                   ? tm.tFirstBufReady - tm.tFirstEnqueue : null;
+    const speakMs  = (tm.tFirstAudioStart && tm.tDone)
+                   ? tm.tDone - tm.tFirstAudioStart : null;
+
+    const fmt = (ms) => (ms / 1000).toFixed(2) + "s";
+
+    // Two rows: timing row + token row
+    const timingParts = [];
+    if (model)           timingParts.push(model);
+    if (ttft !== null)   timingParts.push(`first token ${fmt(ttft)}`);
+    if (llmMs > 200)     timingParts.push(`llm ${fmt(llmMs)}`);
+    if (ttfaMs !== null) timingParts.push(`first audio ${fmt(ttfaMs)}`);
+    if (ttsFetch !== null) timingParts.push(`tts ${fmt(ttsFetch)}`);
+    if (speakMs !== null)  timingParts.push(`spoke ${fmt(speakMs)}`);
+
+    const tokenParts = [];
+    if (compTokens)    tokenParts.push(`out: ${compTokens} tok`);
+    if (promptTokens)  tokenParts.push(`in: ${promptTokens} tok`);
+    if (tokPerSec)     tokenParts.push(`${tokPerSec} tok/s`);
+
+    statsEl.innerHTML =
+      `<span class="stats-timing">${timingParts.join(" · ")}</span>` +
+      (tokenParts.length ? `<span class="stats-tokens">${tokenParts.join(" · ")}</span>` : "");
+  }
 
   setStatus("idle");
   busy = false;

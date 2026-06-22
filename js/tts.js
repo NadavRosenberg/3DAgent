@@ -65,10 +65,10 @@ export class SpeakQueue {
     this.s  = settings;
     this.ls = lipsync;
 
-    this._items     = [];   // [{ text, audioPromise }]
-    this._cursor    = 0;
-    this._sealed    = false;
-    this._analyser  = null;
+    this._items       = [];   // [{ text, audioPromise }]
+    this._cursor      = 0;
+    this._sealed      = false;
+    this._analyser    = null;
     this._nextCtxTime = null;
 
     this._doneResolve = null;
@@ -76,11 +76,18 @@ export class SpeakQueue {
     this._running     = false;
 
     this._pendingCount = 0; // for offline SpeechSynthesis
+
+    // ── Timing (all performance.now() milliseconds) ──────────────────────────
+    this._tFirstEnqueue    = null; // when first sentence was sent to TTS
+    this._tFirstBufReady   = null; // when first audio buffer came back from API
+    this._tFirstAudioStart = null; // when first audio chunk actually starts playing
+    this._tDone            = null; // when the last audio chunk finishes
   }
 
   enqueue(text) {
     text = text.trim();
     if (!text) return;
+    if (this._tFirstEnqueue === null) this._tFirstEnqueue = performance.now();
     this._items.push({ text, audioPromise: this._fetch(text) });
     if (!this._running) { this._running = true; this._loop(); }
   }
@@ -88,13 +95,26 @@ export class SpeakQueue {
   seal()  { this._sealed = true; if (this._pendingCount === 0 && this.s.provider === "local") setTimeout(() => this._tryResolve(), 100); }
   done()  { return this._donePromise; }
 
+  /** Returns timing data after done() resolves (all values are performance.now() ms). */
+  getTimings() {
+    return {
+      tFirstEnqueue:    this._tFirstEnqueue,
+      tFirstBufReady:   this._tFirstBufReady,
+      tFirstAudioStart: this._tFirstAudioStart,
+      tDone:            this._tDone,
+    };
+  }
+
   // ── Internal loop ─────────────────────────────────────────────────────────
   async _loop() {
     while (true) {
       if (this._cursor < this._items.length) {
         const item = this._items[this._cursor++];
         let buf = null;
-        try { buf = await item.audioPromise; } catch (e) { console.warn("TTS chunk failed:", e); }
+        try {
+          buf = await item.audioPromise;
+          if (buf && this._tFirstBufReady === null) this._tFirstBufReady = performance.now();
+        } catch (e) { console.warn("TTS chunk failed:", e); }
         if (buf) await this._playBuffer(item.text, buf);
         else     await this._playSpeechSynthesis(item.text);
       } else if (this._sealed) {
@@ -109,6 +129,7 @@ export class SpeakQueue {
 
   _tryResolve() {
     if (this._sealed && !this._running && this._pendingCount === 0) {
+      this._tDone = performance.now();
       this.ls.stop();
       this._doneResolve();
     }
@@ -133,6 +154,12 @@ export class SpeakQueue {
     if (this._nextCtxTime === null) this._nextCtxTime = ctx.currentTime + 0.06;
     const startTime   = Math.max(this._nextCtxTime, ctx.currentTime + 0.01);
     this._nextCtxTime = startTime + audioBuffer.duration;
+
+    // Record wall-clock time when the first audio chunk is scheduled to start.
+    if (this._tFirstAudioStart === null) {
+      const delayMs = Math.max(0, startTime - ctx.currentTime) * 1000;
+      this._tFirstAudioStart = performance.now() + delayMs;
+    }
 
     src.start(startTime);
     this.ls.scheduleChunk(text, audioBuffer.duration * 1000, startTime);

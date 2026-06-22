@@ -30,7 +30,12 @@
 
     <div id="status" class="status">idle</div>
 
-    <button id="settingsBtn" class="icon-btn" title="Settings" aria-label="Settings">⚙</button>
+    <button id="settingsBtn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
 
     <!-- Navigation shortcuts hint card -->
     <div id="shortcuts">
@@ -50,7 +55,7 @@
     <form id="composer">
       <input id="prompt" type="text" autocomplete="off"
              placeholder="Ask your appliance assistant…" />
-      <button id="mic" type="button" class="icon-btn" title="Speak" aria-label="Speak">
+      <button id="mic" type="button" title="Speak" aria-label="Speak">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M12 19v3"/>
           <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -71,7 +76,7 @@
     <div class="panel">
       <header>
         <h2>Settings</h2>
-        <button id="closeSettings" class="icon-btn" aria-label="Close">✕</button>
+        <button id="closeSettings" aria-label="Close">✕</button>
       </header>
 
       <label>
