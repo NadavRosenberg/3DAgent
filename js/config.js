@@ -7,7 +7,7 @@ export const DEFAULTS = {
   apiKey: "",
   chatModel: "",                // empty => provider default (see PROVIDERS)
   ttsVoice: "",                 // empty => provider default
-  avatarUrl: "./assets/avatar.glb",
+  avatarUrl: "./assets/avatar_fullbody.glb",
   systemPrompt:
     "You are ARIA, a friendly holographic assistant built into a smart home " +
     "appliance. Keep replies warm, concise and spoken-aloud friendly (1-3 short " +

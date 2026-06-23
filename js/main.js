@@ -22,21 +22,21 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.9;
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-camera.position.set(0, 1.45, 3.2);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+camera.position.set(0, 1.0, 4.5);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1.3, 0);
+controls.target.set(0, 0.9, 0);
 controls.enableDamping = true;
 controls.enablePan  = true;     // always enabled; gated by ⌘ key below
 controls.panSpeed   = 1.0;
 controls.enableZoom = true;
 controls.zoomToCursor = true;
 controls.zoomSpeed = 1.2;
-controls.minDistance = 2.2;
-controls.maxDistance = 4.5;
-controls.minPolarAngle = Math.PI * 0.3;
-controls.maxPolarAngle = Math.PI * 0.62;
+controls.minDistance = 0.4;
+controls.maxDistance = 7.0;
+controls.minPolarAngle = Math.PI * 0.15;
+controls.maxPolarAngle = Math.PI * 0.70;
 
 // Default: left-drag = rotate, scroll = zoom.
 controls.mouseButtons = {
@@ -102,62 +102,70 @@ window.addEventListener("pointerup", (e) => {
   canvas.style.cursor = _cmdHeld ? "grab" : "";
 }, { capture: true });
 
-scene.add(new THREE.AmbientLight(0x6fd0ff, 0.35));
-const key = new THREE.DirectionalLight(0x9ff0ff, 1.1);
-key.position.set(2, 4, 3);
+// More ambient for full-body visibility; key from above-right, rim from left-back.
+scene.add(new THREE.AmbientLight(0x6fd0ff, 0.50));
+const key = new THREE.DirectionalLight(0x9ff0ff, 1.2);
+key.position.set(2, 6, 4);
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x3a7bff, 1.0);
-rim.position.set(-3, 2, -2);
+const rim = new THREE.DirectionalLight(0x3a7bff, 1.1);
+rim.position.set(-3, 3, -2);
 scene.add(rim);
-const fill = new THREE.PointLight(0x5fe3ff, 2.2, 12);
-fill.position.set(0, 1.2, 2.5);
+// Low fill light to illuminate the legs / lower body area.
+const lowFill = new THREE.PointLight(0x5fe3ff, 1.6, 8);
+lowFill.position.set(0, -0.4, 2.0);
+scene.add(lowFill);
+const fill = new THREE.PointLight(0x5fe3ff, 2.0, 14);
+fill.position.set(0, 1.4, 2.5);
 scene.add(fill);
 
-// Holographic projector base
+// Holographic projector base — scaled up for a full-body projection.
 const baseGroup = new THREE.Group();
 scene.add(baseGroup);
 
 const ringMat = () =>
-  new THREE.MeshBasicMaterial({ color: 0x5fe3ff, transparent: true, opacity: 0.8,
+  new THREE.MeshBasicMaterial({ color: 0x5fe3ff, transparent: true, opacity: 0.75,
     blending: THREE.AdditiveBlending });
-const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.012, 16, 80), ringMat());
-const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.008, 16, 64), ringMat());
-ring1.rotation.x = ring2.rotation.x = Math.PI / 2;
-ring1.position.y = ring2.position.y = 0.02;
-baseGroup.add(ring1, ring2);
+const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.90, 0.013, 16, 90), ringMat());
+const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.65, 0.009, 16, 72), ringMat());
+const ring3 = new THREE.Mesh(new THREE.TorusGeometry(0.40, 0.006, 16, 48), ringMat());
+ring1.rotation.x = ring2.rotation.x = ring3.rotation.x = Math.PI / 2;
+ring1.position.y = ring2.position.y = ring3.position.y = 0.02;
+baseGroup.add(ring1, ring2, ring3);
 
 const disc = new THREE.Mesh(
-  new THREE.CircleGeometry(0.72, 64),
-  new THREE.MeshBasicMaterial({ color: 0x0a3a4a, transparent: true, opacity: 0.5,
+  new THREE.CircleGeometry(0.92, 72),
+  new THREE.MeshBasicMaterial({ color: 0x0a3a4a, transparent: true, opacity: 0.45,
     blending: THREE.AdditiveBlending })
 );
 disc.rotation.x = -Math.PI / 2;
 baseGroup.add(disc);
 
+// Projection cone — taller to wrap the full body.
 const cone = new THREE.Mesh(
-  new THREE.ConeGeometry(0.7, 2.6, 48, 1, true),
-  new THREE.MeshBasicMaterial({ color: 0x2bbbe0, transparent: true, opacity: 0.06,
+  new THREE.ConeGeometry(0.88, 4.0, 56, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0x2bbbe0, transparent: true, opacity: 0.045,
     side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
 );
-cone.position.y = 1.3;
+cone.position.y = 2.0;
 cone.rotation.x = Math.PI;
 baseGroup.add(cone);
 
-const pCount = 220;
+// Floating particles across the full body height.
+const pCount = 320;
 const pPos = new Float32Array(pCount * 3);
 for (let i = 0; i < pCount; i++) {
-  const r = Math.random() * 0.65;
+  const r = Math.random() * 0.80;
   const a = Math.random() * Math.PI * 2;
   pPos[i * 3]     = Math.cos(a) * r;
-  pPos[i * 3 + 1] = Math.random() * 2.4;
+  pPos[i * 3 + 1] = Math.random() * 3.2;   // full body height + headroom
   pPos[i * 3 + 2] = Math.sin(a) * r;
 }
 const pGeo = new THREE.BufferGeometry();
 pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
 const particles = new THREE.Points(
   pGeo,
-  new THREE.PointsMaterial({ color: 0x9ff0ff, size: 0.012, transparent: true,
-    opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false })
+  new THREE.PointsMaterial({ color: 0x9ff0ff, size: 0.011, transparent: true,
+    opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false })
 );
 baseGroup.add(particles);
 
@@ -205,19 +213,24 @@ async function loadAvatar() {
 }
 
 function frameCameraToFace() {
-  let { center, radius } = avatar.getFocus();
+  let { center, radius, fullBody } = avatar.getFocus();
   if (!isFinite(radius) || radius <= 1e-3) {
-    center = new THREE.Vector3(0, 1.3, 0);
-    radius = 0.7;
+    center   = new THREE.Vector3(0, 0.9, 0);
+    radius   = 1.0;
+    fullBody = true;
   }
-  const fov  = (camera.fov * Math.PI) / 180;
-  const dist = (radius * 2.4) / Math.tan(fov / 2);
+  const fov = (camera.fov * Math.PI) / 180;
+  // Full-body avatars already have a large radius covering the figure; use a
+  // tighter multiplier so the camera isn't pulled too far back.
+  const mult = fullBody ? 1.1 : 2.4;
+  const dist = (radius * mult) / Math.tan(fov / 2);
   controls.target.copy(center);
-  camera.position.set(center.x, center.y + radius * 0.15, center.z + dist);
-  controls.minDistance = Math.max(0.3, dist * 0.4);
-  controls.maxDistance = dist * 2.5;
+  camera.position.set(center.x, center.y + radius * 0.08, center.z + dist);
+  // Allow zooming very close (to inspect the face) or very far (full scene).
+  controls.minDistance = Math.max(0.3, dist * (fullBody ? 0.12 : 0.4));
+  controls.maxDistance = dist * (fullBody ? 2.0 : 2.5);
   controls.update();
-  fill.position.set(center.x, center.y, center.z + radius * 2);
+  fill.position.set(center.x, center.y, center.z + radius * (fullBody ? 1.0 : 2.0));
 }
 
 // ---------------------------------------------------------------------------
