@@ -9,7 +9,7 @@ import { Avatar } from "./avatar.js";
 import { LipSync } from "./lipsync.js";
 import { streamChat } from "./llm.js";
 import { speak, SpeakQueue, cancelSpeak } from "./tts.js";
-import { loadSettings, saveSettings, DEFAULTS, providerInfo } from "./config.js";
+import { loadSettings, saveSettings, DEFAULTS, providerInfo, AVATAR_PRESETS } from "./config.js";
 
 // ---------------------------------------------------------------------------
 //  Scene / hologram stage
@@ -571,8 +571,56 @@ const fields = {
   systemPrompt: document.getElementById("systemPrompt"),
 };
 
-const cloudSettings = document.getElementById("cloudSettings");
+const cloudSettings  = document.getElementById("cloudSettings");
+const avatarPresetEl = document.getElementById("avatarPresets");
 
+// ── Avatar preset cards ────────────────────────────────────────────────────
+function buildPresetCards() {
+  avatarPresetEl.innerHTML = "";
+  AVATAR_PRESETS.forEach((preset) => {
+    const card = document.createElement("div");
+    card.className = "avatar-preset-card";
+    card.dataset.id = preset.id;
+    card.innerHTML =
+      `<span class="preset-icon">${preset.icon}</span>` +
+      `<span class="preset-label">${preset.label}</span>` +
+      `<span class="preset-hint">${preset.hint}</span>`;
+    card.addEventListener("click", () => {
+      document.querySelectorAll(".avatar-preset-card").forEach((c) => c.classList.remove("active"));
+      card.classList.add("active");
+      if (preset.url) {
+        fields.avatarUrl.value = preset.url;
+        document.getElementById("customAvatarRow").style.opacity = "0.55";
+      } else {
+        // "Custom" card — focus the URL input
+        document.getElementById("customAvatarRow").style.opacity = "1";
+        fields.avatarUrl.focus();
+      }
+    });
+    avatarPresetEl.appendChild(card);
+  });
+}
+
+function markActivePreset(url) {
+  document.querySelectorAll(".avatar-preset-card").forEach((c) => c.classList.remove("active"));
+  document.getElementById("customAvatarRow").style.opacity = "1";
+  const match = AVATAR_PRESETS.find((p) => p.url === url);
+  if (match) {
+    const card = avatarPresetEl.querySelector(`[data-id="${match.id}"]`);
+    if (card) {
+      card.classList.add("active");
+      if (match.url) document.getElementById("customAvatarRow").style.opacity = "0.55";
+    }
+  } else {
+    // URL doesn't match any preset → highlight "Custom"
+    const customCard = avatarPresetEl.querySelector(`[data-id="custom"]`);
+    if (customCard) customCard.classList.add("active");
+  }
+}
+
+buildPresetCards();
+
+// ── Voice / provider helpers ───────────────────────────────────────────────
 function populateVoices(provider, selected) {
   const info = providerInfo(provider);
   fields.ttsVoice.innerHTML = "";
@@ -598,6 +646,7 @@ function fillSettingsForm() {
     fields[k].value = settings[k] ?? "";
   }
   syncProviderVisibility(settings.ttsVoice);
+  markActivePreset(settings.avatarUrl);
 }
 
 function openSettings()  { fillSettingsForm(); settingsEl.classList.remove("hidden"); }

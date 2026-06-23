@@ -106,9 +106,15 @@
           directly to Google from your machine — never to any third-party server.</p>
       </div>
 
-      <label>
-        <span>Avatar GLB URL <em>(optional — try a Ready Player Me URL)</em></span>
-        <input id="avatarUrl" type="text" placeholder="./assets/avatar.glb" />
+      <!-- Avatar presets -->
+      <div class="settings-section-label">Avatar</div>
+      <div id="avatarPresets" class="avatar-presets">
+        <!-- preset cards are injected by main.js from AVATAR_PRESETS -->
+      </div>
+      <label id="customAvatarRow">
+        <span>Custom GLB URL</span>
+        <input id="avatarUrl" type="text" placeholder="https://… or ./assets/my-model.glb" />
+        <em>Paste any .glb URL — <a href="https://studio.tripo3d.ai" target="_blank" rel="noopener">Tripo3D</a>, <a href="https://readyplayer.me" target="_blank" rel="noopener">Ready Player Me</a>, Sketchfab, …</em>
       </label>
 
       <label>

@@ -14,6 +14,32 @@ export const DEFAULTS = {
     "sentences). Avoid markdown, lists and emoji since your words are read out loud.",
 };
 
+// Preset avatars shown in the settings panel.
+// Add new entries here and they will appear automatically as preset cards.
+export const AVATAR_PRESETS = [
+  {
+    id: "human",
+    label: "Human",
+    icon: "👩",
+    url: "./assets/avatar_fullbody.glb",
+    hint: "Full-body human, Mixamo rig",
+  },
+  {
+    id: "robot",
+    label: "Robot",
+    icon: "🤖",
+    url: "./assets/avatar_robot.glb",
+    hint: "Expressive robot with Idle animation",
+  },
+  {
+    id: "custom",
+    label: "Custom",
+    icon: "🔗",
+    url: null, // signals "use the URL field below"
+    hint: "Paste any GLB/GLTF URL",
+  },
+];
+
 // Per-provider defaults + voice lists used to populate the settings UI.
 export const PROVIDERS = {
   gemini: {
@@ -36,11 +62,18 @@ export function providerInfo(provider) {
   return PROVIDERS[provider] || PROVIDERS.local;
 }
 
+// Old avatar URL from before the full-body refactor — always migrate to default.
+const LEGACY_AVATAR_URL = "./assets/avatar.glb";
+
 export function loadSettings() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
-    // Migrate anyone who had "openai" saved — switch them to "gemini".
+    // Migrate: OpenAI provider → Gemini.
     if (saved.provider === "openai") saved.provider = "gemini";
+    // Migrate: old face-only avatar → new full-body default.
+    if (!saved.avatarUrl || saved.avatarUrl === LEGACY_AVATAR_URL) {
+      delete saved.avatarUrl; // let DEFAULTS.avatarUrl take over
+    }
     return { ...DEFAULTS, ...saved };
   } catch {
     return { ...DEFAULTS };

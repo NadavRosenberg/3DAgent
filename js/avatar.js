@@ -7,11 +7,12 @@ const KTX2_TRANSCODER =
   "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/";
 
 // Loads a GLB avatar and exposes controls for blinking, idle motion and
-// lip-sync. Supports three rig types automatically detected on load:
-//   "arkit"  — ARKit blendshape face (jawOpen, mouthFunnel, …)
-//   "viseme" — Ready Player Me Oculus viseme blendshapes
-//   "mixamo" — Full-body Mixamo skeleton (bone-based jaw simulation)
-//   "none"   — Unknown, no animation applied
+// lip-sync. Supports four rig types automatically detected on load:
+//   "arkit"    — ARKit blendshape face (jawOpen, mouthFunnel, …)
+//   "viseme"   — Ready Player Me Oculus viseme blendshapes
+//   "mixamo"   — Full-body Mixamo skeleton (bone-based jaw/idle animation)
+//   "animated" — Any other rigged model with named animations (plays Idle clip)
+//   "static"   — No skeleton/animations (root-level float)
 
 const VISEME_KEYS = [
   "viseme_sil", "viseme_PP", "viseme_FF", "viseme_TH", "viseme_DD",
@@ -28,12 +29,12 @@ export class Avatar {
   constructor(renderer) {
     this.renderer = renderer;
     this.root     = new THREE.Group();
-    this.meshes   = [];     // meshes with morph targets
-    this.dict     = {};     // morphName → [{ mesh, index }]
-    this.kind     = "none"; // "arkit" | "viseme" | "mixamo" | "none"
-    this.head     = null;   // main head/neck bone or Object3D
+    this.meshes   = [];       // meshes with morph targets
+    this.dict     = {};       // morphName → [{ mesh, index }]
+    this.kind     = "static"; // "arkit"|"viseme"|"mixamo"|"animated"|"static"
+    this.head     = null;     // main head bone or Object3D
 
-    // Mixamo bone references (null for non-Mixamo avatars)
+    // Mixamo bone references (populated only for mixamo kind)
     this._hips         = null;
     this._spine        = null;
     this._spine1       = null;
@@ -46,6 +47,11 @@ export class Avatar {
     this._leftForeArm  = null;
     this._rightForeArm = null;
     this._boneRest     = new Map(); // bone.name → rest Quaternion
+    this._jawCur       = 0;        // smoothed jaw opening (mixamo)
+
+    // Animation mixer (for "animated" kind with named clips)
+    this._mixer        = null;
+    this._idleAction   = null;
 
     this._blink     = 0;
     this._nextBlink = 1.5;
@@ -57,16 +63,20 @@ export class Avatar {
   }
 
   async load(url) {
+    // Stop any running animation mixer.
+    if (this._mixer) { this._mixer.stopAllAction(); this._mixer = null; this._idleAction = null; }
+
     this.root.clear();
     this.meshes   = [];
     this.dict     = {};
-    this.kind     = "none";
+    this.kind     = "static";
     this.head     = null;
     this._boneRest.clear();
     this._hips = this._spine = this._spine1 = this._spine2 = null;
     this._neck = this._leftShoulder = this._rightShoulder = null;
     this._leftArm = this._rightArm = null;
     this._leftForeArm = this._rightForeArm = null;
+    this._jawCur = 0;
 
     const loader = new GLTFLoader();
     if (this.renderer) {
@@ -126,6 +136,19 @@ export class Avatar {
     if (this.has("jawOpen"))                              this.kind = "arkit";
     else if (VISEME_KEYS.some((v) => this.has(v)))        this.kind = "viseme";
     else if (this._hips?.name?.startsWith("mixamorig:")) this.kind = "mixamo";
+    else if (gltf.animations?.length)                    this.kind = "animated";
+    else                                                 this.kind = "static";
+
+    // Set up animation mixer for "animated" kind (plays the Idle clip).
+    if (this.kind === "animated" && gltf.animations.length) {
+      this._mixer = new THREE.AnimationMixer(model);
+      // Prefer a clip named "Idle" (case-insensitive), fall back to the first.
+      const idleClip = gltf.animations.find(
+        (a) => a.name.toLowerCase().includes("idle")
+      ) || gltf.animations[0];
+      this._idleAction = this._mixer.clipAction(idleClip);
+      this._idleAction.play();
+    }
 
     // Zero all morph targets so we start from a neutral expression.
     for (const mesh of this.meshes) mesh.morphTargetInfluences.fill(0);
@@ -156,27 +179,23 @@ export class Avatar {
   }
 
   // Returns the camera focus point and a radius that tells the caller how far
-  // to pull back. Also signals whether this is a full-body model.
+  // to pull back. fullBody=true triggers a wider, fixed-distance camera framing.
   getFocus() {
     this.root.updateMatrixWorld(true);
 
-    if (this.kind === "mixamo") {
-      // For a full-body Mixamo avatar signal the caller to use a fixed wide-angle
-      // view instead of computing a tight focus — avoids the arms-in-T-pose
-      // inflating the bounding box and pushing the camera too far.
+    // Full-body rigs and animated/static models: frame the whole figure.
+    if (this.kind === "mixamo" || this.kind === "animated" || this.kind === "static") {
       const box    = new THREE.Box3().setFromObject(this.root);
       const size   = box.getSize(new THREE.Vector3());
-      const height = size.y || 1.8;
-      // Aim at the mid-body (waist level).
       const centerY = (box.min.y + box.max.y) * 0.5;
       return {
         center:   new THREE.Vector3(0, centerY, 0),
-        radius:   height * 0.50,
+        radius:   (size.y || 1.8) * 0.50,
         fullBody: true,
       };
     }
 
-    // Face-scan / viseme avatar: focus on the face mesh bounding box.
+    // Face-scan / viseme avatar: focus tightly on the face mesh.
     const faceMeshes = this.meshes.filter((m) => {
       const d = m.morphTargetDictionary || {};
       return d.jawOpen !== undefined ||
@@ -281,12 +300,28 @@ export class Avatar {
     this._t += dt;
     const t = this._t;
 
+    // Drive animation mixer for any animated model.
+    if (this._mixer) this._mixer.update(dt);
+
     if (this.kind === "mixamo") {
       this._updateMixamo(t, dt);
       return;
     }
 
-    // ARKit / viseme / none — original behaviour.
+    if (this.kind === "animated") {
+      // The mixer handles the skeleton; just add a subtle root sway.
+      this.root.rotation.y = Math.sin(t * 0.18) * 0.03;
+      return;
+    }
+
+    if (this.kind === "static") {
+      // Gentle floating hologram effect for static meshes (e.g. Tripo3D models).
+      this.root.position.y = Math.sin(t * 0.85) * 0.05;
+      this.root.rotation.y = Math.sin(t * 0.20) * 0.05;
+      return;
+    }
+
+    // ARKit / viseme — original behaviour with head bob.
     if (this.head) {
       this.head.rotation.y = Math.sin(t * 0.5) * 0.06;
       this.head.rotation.x = Math.sin(t * 0.37) * 0.03;
