@@ -122,50 +122,50 @@ scene.add(fill);
 const baseGroup = new THREE.Group();
 scene.add(baseGroup);
 
+// Three concentric rings at foot level — the projector base halo.
 const ringMat = () =>
-  new THREE.MeshBasicMaterial({ color: 0x5fe3ff, transparent: true, opacity: 0.75,
+  new THREE.MeshBasicMaterial({ color: 0x5fe3ff, transparent: true, opacity: 0.72,
     blending: THREE.AdditiveBlending });
-const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.90, 0.013, 16, 90), ringMat());
-const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.65, 0.009, 16, 72), ringMat());
-const ring3 = new THREE.Mesh(new THREE.TorusGeometry(0.40, 0.006, 16, 48), ringMat());
+const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.012, 16, 90), ringMat());
+const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.50, 0.008, 16, 72), ringMat());
+const ring3 = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.005, 16, 48), ringMat());
 ring1.rotation.x = ring2.rotation.x = ring3.rotation.x = Math.PI / 2;
 ring1.position.y = ring2.position.y = ring3.position.y = 0.02;
 baseGroup.add(ring1, ring2, ring3);
+// (No disc — removed so there's no solid floor under the avatar.)
 
-const disc = new THREE.Mesh(
-  new THREE.CircleGeometry(0.92, 72),
-  new THREE.MeshBasicMaterial({ color: 0x0a3a4a, transparent: true, opacity: 0.45,
-    blending: THREE.AdditiveBlending })
-);
-disc.rotation.x = -Math.PI / 2;
-baseGroup.add(disc);
-
-// Projection cone — taller to wrap the full body.
+// Projection cone: tip at y=0, open end just above the avatar's head (y≈1.9).
+// ConeGeometry rotated 180° so the pointy end faces down.
 const cone = new THREE.Mesh(
-  new THREE.ConeGeometry(0.88, 4.0, 56, 1, true),
-  new THREE.MeshBasicMaterial({ color: 0x2bbbe0, transparent: true, opacity: 0.045,
+  new THREE.ConeGeometry(0.70, 1.9, 56, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0x2bbbe0, transparent: true, opacity: 0.048,
     side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false })
 );
-cone.position.y = 2.0;
+cone.position.y = 0.95;   // center of cone = half its height
 cone.rotation.x = Math.PI;
 baseGroup.add(cone);
 
-// Floating particles across the full body height.
-const pCount = 320;
-const pPos = new Float32Array(pCount * 3);
+// Particles distributed within the avatar's actual volume (0 → 1.9 units tall,
+// radius tapered so they stay inside the cone silhouette).
+const pCount = 280;
+const pPos   = new Float32Array(pCount * 3);
+const AVATAR_H = 1.9;
 for (let i = 0; i < pCount; i++) {
-  const r = Math.random() * 0.80;
+  const y = Math.random() * AVATAR_H;                // 0 → 1.9
+  // Cone radius at this height: 0 at tip, 0.70 at top → linearly proportional.
+  const maxR = (y / AVATAR_H) * 0.62;
+  const r = Math.sqrt(Math.random()) * maxR;          // sqrt for uniform disk fill
   const a = Math.random() * Math.PI * 2;
   pPos[i * 3]     = Math.cos(a) * r;
-  pPos[i * 3 + 1] = Math.random() * 3.2;   // full body height + headroom
+  pPos[i * 3 + 1] = y;
   pPos[i * 3 + 2] = Math.sin(a) * r;
 }
 const pGeo = new THREE.BufferGeometry();
 pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
 const particles = new THREE.Points(
   pGeo,
-  new THREE.PointsMaterial({ color: 0x9ff0ff, size: 0.011, transparent: true,
-    opacity: 0.65, blending: THREE.AdditiveBlending, depthWrite: false })
+  new THREE.PointsMaterial({ color: 0x9ff0ff, size: 0.010, transparent: true,
+    opacity: 0.60, blending: THREE.AdditiveBlending, depthWrite: false })
 );
 baseGroup.add(particles);
 
