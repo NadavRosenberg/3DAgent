@@ -160,17 +160,18 @@ export class Avatar {
   getFocus() {
     this.root.updateMatrixWorld(true);
 
-    if (this.kind === "mixamo" && this.head) {
-      // For a full-body Mixamo avatar, base the radius on the whole body so
-      // the camera shows the complete figure.
+    if (this.kind === "mixamo") {
+      // For a full-body Mixamo avatar signal the caller to use a fixed wide-angle
+      // view instead of computing a tight focus — avoids the arms-in-T-pose
+      // inflating the bounding box and pushing the camera too far.
       const box    = new THREE.Box3().setFromObject(this.root);
       const size   = box.getSize(new THREE.Vector3());
-      const height = size.y;
-      // Centre the view on the upper chest / shoulder area (≈70 % height).
-      const focusY = box.min.y + height * 0.70;
+      const height = size.y || 1.8;
+      // Aim at the mid-body (waist level).
+      const centerY = (box.min.y + box.max.y) * 0.5;
       return {
-        center:   new THREE.Vector3(0, focusY, 0),
-        radius:   height * 0.55,   // enough to frame the full figure
+        center:   new THREE.Vector3(0, centerY, 0),
+        radius:   height * 0.50,
         fullBody: true,
       };
     }
@@ -192,13 +193,16 @@ export class Avatar {
   }
 
   // ── Hologram shader ────────────────────────────────────────────────────────
+  // Keeps the mesh fully opaque (no see-through skin revealing inner geometry),
+  // then adds a cyan tint, scanline grid and rim glow purely via RGB.
   _applyHologramLook(material) {
     const mats = Array.isArray(material) ? material : [material];
     for (const m of mats) {
       if (!m || m.userData.holo) continue;
-      m.userData.holo  = true;
-      m.transparent    = true;
-      m.opacity        = 0.94;
+      m.userData.holo = true;
+      // Stay opaque so inner geometry (teeth, jaw mesh) doesn't bleed through.
+      m.transparent = false;
+      m.depthWrite  = true;
       if (m.emissive) m.emissive = new THREE.Color(0x071a24);
 
       m.onBeforeCompile = (shader) => {
@@ -217,14 +221,13 @@ export class Avatar {
             "#include <dithering_fragment>",
             `#include <dithering_fragment>
              float fres = pow(1.0 - abs(dot(normalize(vViewN), normalize(-vViewPos))), 2.5);
-             // Cyan hologram tint — blends with original texture colour.
-             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.28, 0.82, 1.0), 0.40);
-             // Subtle scanline grid.
+             // Cyan hologram tint — blends with the original texture colour.
+             gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.28, 0.82, 1.0), 0.38);
+             // Subtle horizontal scanlines.
              float scan = mod(gl_FragCoord.y * 0.45, 1.0);
-             gl_FragColor.rgb *= (0.93 + 0.07 * step(0.5, scan));
-             // Rim glow.
-             gl_FragColor.rgb += uRim * fres * 0.75;
-             gl_FragColor.a   = max(gl_FragColor.a * 0.88, fres * 0.92);`
+             gl_FragColor.rgb *= (0.94 + 0.06 * step(0.5, scan));
+             // Rim glow adds brightness at silhouette edges — purely additive.
+             gl_FragColor.rgb += uRim * fres * 0.80;`
           );
       };
       m.needsUpdate = true;

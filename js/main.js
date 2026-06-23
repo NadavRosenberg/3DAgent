@@ -219,18 +219,28 @@ function frameCameraToFace() {
     radius   = 1.0;
     fullBody = true;
   }
-  const fov = (camera.fov * Math.PI) / 180;
-  // Full-body avatars already have a large radius covering the figure; use a
-  // tighter multiplier so the camera isn't pulled too far back.
-  const mult = fullBody ? 1.1 : 2.4;
-  const dist = (radius * mult) / Math.tan(fov / 2);
+
+  if (fullBody) {
+    // Hard-coded reliable view for a ~1.8-unit tall full-body avatar.
+    // Pull back to z=4.8 so the whole figure comfortably fills the frame.
+    controls.target.set(center.x, center.y, center.z);
+    camera.position.set(center.x, center.y + 0.10, center.z + 4.8);
+    controls.minDistance = 0.4;   // zoom all the way to the face
+    controls.maxDistance = 9.0;   // zoom all the way out
+    controls.update();
+    fill.position.set(center.x, 1.4, center.z + 2.5);
+    return;
+  }
+
+  // Face-only avatar: computed tight framing (original behaviour).
+  const fov  = (camera.fov * Math.PI) / 180;
+  const dist = (radius * 2.4) / Math.tan(fov / 2);
   controls.target.copy(center);
-  camera.position.set(center.x, center.y + radius * 0.08, center.z + dist);
-  // Allow zooming very close (to inspect the face) or very far (full scene).
-  controls.minDistance = Math.max(0.3, dist * (fullBody ? 0.12 : 0.4));
-  controls.maxDistance = dist * (fullBody ? 2.0 : 2.5);
+  camera.position.set(center.x, center.y + radius * 0.15, center.z + dist);
+  controls.minDistance = Math.max(0.3, dist * 0.4);
+  controls.maxDistance = dist * 2.5;
   controls.update();
-  fill.position.set(center.x, center.y, center.z + radius * (fullBody ? 1.0 : 2.0));
+  fill.position.set(center.x, center.y, center.z + radius * 2);
 }
 
 // ---------------------------------------------------------------------------
